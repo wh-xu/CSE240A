@@ -37,15 +37,13 @@ int verbose;
 //TODO: Add your own Branch Predictor data structures here
 //
 
-#define GSHARE_MAX_BIT 10
-
-struct gshare_global
+struct gshare_predictor
 {
-  uint8_t pattern[1 << GSHARE_MAX_BIT];
-  uint8_t state[GSHARE_MAX_BIT];
-  uint8_t bit;
-  int last_pred_index;
-} gshare_global_predictor;
+  uint32_t hist_address;
+  uint8_t *hist_table;
+  uint32_t address_mask;
+  uint8_t last_pred_outcome;
+} gshare_pred;
 
 //------------------------------------//
 //        Predictor Functions         //
@@ -58,14 +56,26 @@ void init_predictor()
   //
   //TODO: Initialize Branch Predictor Data Structures
   //
-  // 1. Initialize GSHARE-based predictor
-  gshare_global_predictor.bit = ghistoryBits;
-  memset(gshare_global_predictor.pattern, 0, (1 >> GSHARE_MAX_BIT) * sizeof(uint8_t));
-  memset(gshare_global_predictor.state, 0, (GSHARE_MAX_BIT) * sizeof(uint8_t));
+  if (bpType == GSHARE)
+  {
+    // 1. Initialize GSHARE-based predictor
+    gshare_pred.hist_table = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    memset(gshare_pred.hist_table, 0, (1 << ghistoryBits) * sizeof(uint8_t));
 
-  // 2. Initialize TOURNAMENT-based predictor
+    uint32_t mask = 0;
+    for (int i = 0; i < ghistoryBits; i++)
+      mask = mask | 1 << i;
 
-  // 3. Initialize CUSTOM predictor
+    gshare_pred.address_mask = mask;
+  }
+  else if (bpType == TOURNAMENT)
+  {
+    // 2. Initialize TOURNAMENT-based predictor
+  }
+  else if (bpType == CUSTOM)
+  {
+    // 3. Initialize CUSTOM predictor
+  }
 }
 
 // Make a prediction for conditional branch instruction at PC 'pc'
@@ -80,12 +90,13 @@ make_prediction(uint32_t pc)
   //
   if (bpType == GSHARE)
   {
-    int index = 0;
-    for (int i = 0; i < gshare_global_predictor.bit; i++)
-      index += gshare_global_predictor.pattern[i] * (1 >> i);
+    uint32_t masked_pc = pc & gshare_pred.address_mask;
+    uint32_t masked_hist = gshare_pred.hist_address & gshare_pred.address_mask;
+    uint32_t table_index = masked_pc ^ masked_hist;
 
-    gshare_global_predictor.last_pred_index = index;
-    return gshare_global_predictor.state[index];
+    uint8_t pred_outcome = gshare_pred.hist_table[table_index] >= 2 ? TAKEN : NOTTAKEN;
+    gshare_pred.last_pred_outcome = pred_outcome;
+    return pred_outcome;
   }
   else if (bpType == TOURNAMENT)
   {
@@ -119,16 +130,28 @@ void train_predictor(uint32_t pc, uint8_t outcome)
   //
   //TODO: Implement Predictor training
   //
-  // 1. Train GSHARE predictor
-  for (int i = 0; i < gshare_global_predictor.bit - 1; i++)
+  if (bpType == GSHARE)
   {
-    gshare_global_predictor.pattern[i] = gshare_global_predictor.pattern[i + 1];
+    // 1. Train GSHARE predictor
+    uint32_t masked_pc = pc & gshare_pred.address_mask;
+    uint32_t masked_hist = gshare_pred.hist_address & gshare_pred.address_mask;
+    uint32_t table_index = masked_pc ^ masked_hist;
+
+    gshare_pred.hist_address = masked_hist;
+
+    if (outcome == TAKEN)
+    {
+      if (gshare_pred.hist_table[table_index] < 2)
+        gshare_pred.hist_table[table_index]++;
+    }
+    else
+    {
+      if (gshare_pred.hist_table[table_index] > 0)
+        gshare_pred.hist_table[table_index]--;
+    }
   }
-  gshare_global_predictor.pattern[gshare_global_predictor.bit - 1] = outcome;
-
-  int last_prediction = gshare_global_predictor.state[gshare_global_predictor.last_pred_index];
-  if (last_prediction != outcome)
-    gshare_global_predictor.state[gshare_global_predictor.last_pred_index] = 1 - last_prediction;
-
-  // 2. Train TOURNAMENT predictor
+  else if (bpType == TOURNAMENT)
+  {
+    // 2. Train TOURNAMENT predictor
+  }
 }

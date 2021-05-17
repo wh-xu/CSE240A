@@ -3,7 +3,7 @@ make
 
 
 SCHEME="gshare"
-PARMS=5
+PARMS=$1
 
 # Testing all traces
 echo "\n\nBranch prediction scheme: $SCHEME with parms: $PARMS"
