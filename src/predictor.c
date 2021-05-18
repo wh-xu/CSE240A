@@ -45,6 +45,25 @@ struct gshare_predictor
   uint8_t last_pred_outcome;
 } gshare_pred;
 
+struct tournament_predictor
+{
+  uint8_t *global_pred_table;
+  uint32_t prev_global_branches;
+  uint32_t global_pc_mask;
+
+  uint32_t *local_hist_table;
+  uint8_t *local_pred_table;
+  uint32_t prev_local_branches;
+  uint32_t local_pc_mask;
+
+  uint8_t *chooser;
+  uint8_t last_choice;
+
+  uint32_t pc_mask;
+  uint8_t last_local_pred;
+  uint8_t last_global_pred;
+} tour_pred;
+
 //------------------------------------//
 //        Predictor Functions         //
 //------------------------------------//
@@ -60,7 +79,7 @@ void init_predictor()
   {
     // 1. Initialize GSHARE-based predictor
     gshare_pred.hist_table = malloc((1 << ghistoryBits) * sizeof(uint8_t));
-    memset(gshare_pred.hist_table, 0, (1 << ghistoryBits) * sizeof(uint8_t));
+    memset(gshare_pred.hist_table, WN, (1 << ghistoryBits) * sizeof(uint8_t));
 
     uint32_t mask = 0;
     for (int i = 0; i < ghistoryBits; i++)
@@ -71,6 +90,33 @@ void init_predictor()
   else if (bpType == TOURNAMENT)
   {
     // 2. Initialize TOURNAMENT-based predictor
+    tour_pred.global_pred_table = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    memset(tour_pred.global_pred_table, 0, (1 << ghistoryBits) * sizeof(uint8_t));
+    tour_pred.prev_global_branches = 0;
+
+    tour_pred.local_hist_table = malloc((1 << pcIndexBits) * sizeof(uint32_t));
+    memset(tour_pred.local_hist_table, 0, (1 << pcIndexBits) * sizeof(uint32_t));
+    tour_pred.local_pred_table = malloc((1 << lhistoryBits) * sizeof(uint8_t));
+    memset(tour_pred.local_pred_table, 0, (1 << lhistoryBits) * sizeof(uint8_t));
+    tour_pred.prev_local_branches = 0;
+
+    uint32_t mask = 0;
+    for (int i = 0; i < pcIndexBits; i++)
+      mask = mask | 1 << i;
+    tour_pred.pc_mask = mask;
+
+    mask = 0;
+    for (int i = 0; i < ghistoryBits; i++)
+      mask = mask | 1 << i;
+    tour_pred.global_pc_mask = mask;
+
+    mask = 0;
+    for (int i = 0; i < lhistoryBits; i++)
+      mask = mask | 1 << i;
+    tour_pred.local_pc_mask = mask;
+
+    tour_pred.chooser = malloc((1 << ghistoryBits) * sizeof(uint8_t));
+    memset(tour_pred.chooser, WN, (1 << ghistoryBits) * sizeof(uint8_t));
   }
   else if (bpType == CUSTOM)
   {
@@ -100,6 +146,18 @@ make_prediction(uint32_t pc)
   }
   else if (bpType == TOURNAMENT)
   {
+    uint32_t local_pred_table_index = tour_pred.local_hist_table[pc & tour_pred.pc_mask];
+    uint8_t local_prediction = tour_pred.local_pred_table[local_pred_table_index] >= 2 ? TAKEN : NOTTAKEN;
+    tour_pred.last_local_pred = local_prediction;
+
+    uint32_t path_history = tour_pred.prev_global_branches & tour_pred.global_pc_mask;
+    uint8_t global_prediction = tour_pred.global_pred_table[path_history] >= 2 ? TAKEN : NOTTAKEN;
+    tour_pred.last_global_pred = global_prediction;
+
+    uint8_t predictor_choice = tour_pred.chooser[path_history];
+    tour_pred.last_choice = predictor_choice;
+
+    return predictor_choice >= 2 ? global_prediction : local_prediction;
   }
   else if (bpType == CUSTOM)
   {
@@ -141,17 +199,59 @@ void train_predictor(uint32_t pc, uint8_t outcome)
 
     if (outcome == TAKEN)
     {
-      if (gshare_pred.hist_table[table_index] < 2)
+      if (gshare_pred.hist_table[table_index] < ST)
         gshare_pred.hist_table[table_index]++;
     }
     else
     {
-      if (gshare_pred.hist_table[table_index] > 0)
+      if (gshare_pred.hist_table[table_index] > SN)
         gshare_pred.hist_table[table_index]--;
     }
   }
   else if (bpType == TOURNAMENT)
   {
     // 2. Train TOURNAMENT predictor
+    uint32_t local_pred_table_index = tour_pred.local_hist_table[pc & tour_pred.pc_mask];
+    uint32_t path_history = tour_pred.prev_global_branches & tour_pred.global_pc_mask;
+    uint8_t predictor_choice = tour_pred.chooser[path_history];
+
+    // Updating global/local predictors
+    if (outcome == TAKEN)
+    {
+      if (tour_pred.global_pred_table[path_history] < ST)
+        tour_pred.global_pred_table[path_history]++;
+
+      if (tour_pred.local_pred_table[local_pred_table_index] < ST)
+        tour_pred.local_pred_table[local_pred_table_index]++;
+    }
+    else
+    {
+      if (tour_pred.global_pred_table[path_history] > SN)
+        tour_pred.global_pred_table[path_history]--;
+
+      if (tour_pred.local_pred_table[local_pred_table_index] > SN)
+        tour_pred.local_pred_table[local_pred_table_index]--;
+    }
+
+    // Updating path history / local history table
+    tour_pred.prev_global_branches = ((tour_pred.prev_global_branches << 1) + outcome) & tour_pred.global_pc_mask;
+
+    if (tour_pred.last_local_pred == outcome)
+      tour_pred.local_hist_table[pc & tour_pred.pc_mask] = (tour_pred.local_hist_table[pc & tour_pred.pc_mask] << 1 + outcome) & tour_pred.local_pc_mask;
+
+    // // Updating chooser
+    if (tour_pred.last_local_pred != tour_pred.last_global_pred)
+    {
+      if (tour_pred.last_global_pred == outcome)
+      {
+        if (predictor_choice < 3)
+          tour_pred.chooser[path_history]++;
+      }
+      else
+      {
+        if (predictor_choice > 0)
+          tour_pred.chooser[path_history]--;
+      }
+    }
   }
 }
