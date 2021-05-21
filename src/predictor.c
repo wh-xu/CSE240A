@@ -64,6 +64,20 @@ struct tournament_predictor
   uint8_t last_global_pred;
 } tour_pred;
 
+struct nn_predictor
+{
+  uint32_t pc_mask;
+  uint32_t gl_hist_mask;
+  int8_t *weights;
+  uint8_t history_len;
+  uint32_t global_hist_reg;
+  uint8_t threshold;
+  uint8_t last_pred;
+} nn_pred;
+
+const uint32_t nn_hist_len = 60;
+const uint32_t pc_ind_len = 10;
+
 //------------------------------------//
 //        Predictor Functions         //
 //------------------------------------//
@@ -121,6 +135,21 @@ void init_predictor()
   else if (bpType == CUSTOM)
   {
     // 3. Initialize CUSTOM predictor
+    uint32_t mask = 0;
+    for (int i = 0; i < pc_ind_len; i++)
+      mask = mask | 1 << i;
+    nn_pred.pc_mask = mask;
+
+    mask = 0;
+    // for (int i = 0; i < nn_hist_len; i++)
+    mask = mask | 1;
+    nn_pred.gl_hist_mask = mask;
+
+    nn_pred.weights = malloc(((1 << pc_ind_len) * nn_hist_len) * sizeof(int8_t));
+    memset(nn_pred.weights, 0, ((1 << pc_ind_len) * nn_hist_len) * sizeof(int8_t));
+
+    nn_pred.global_hist_reg = 0;
+    nn_pred.threshold = 1.93 * nn_hist_len + 14;
   }
 }
 
@@ -161,6 +190,22 @@ make_prediction(uint32_t pc)
   }
   else if (bpType == CUSTOM)
   {
+    uint32_t weight_index = pc & nn_pred.pc_mask;
+    int8_t *W = nn_pred.weights + weight_index * nn_hist_len;
+
+    // Compute y
+    int32_t y = 1;
+    for (int i = 0; i < nn_hist_len; i++)
+    {
+      if ((nn_pred.global_hist_reg >> i) & nn_pred.gl_hist_mask == TAKEN)
+        y += W[i];
+      else
+        y -= W[i];
+    }
+
+    uint8_t prediction = y > nn_pred.threshold ? TAKEN : NOTTAKEN;
+    nn_pred.last_pred = prediction;
+    return prediction;
   }
 
   // Make a prediction based on the bpType
@@ -253,5 +298,23 @@ void train_predictor(uint32_t pc, uint8_t outcome)
           tour_pred.chooser[path_history]--;
       }
     }
+  }
+  else if (bpType == CUSTOM)
+  {
+    if (nn_pred.last_pred != outcome)
+    {
+      uint32_t weight_index = pc & nn_pred.pc_mask;
+      int8_t *W = nn_pred.weights + weight_index * nn_hist_len;
+
+      for (int i = 0; i < nn_hist_len; i++)
+      {
+        if (outcome == ((nn_pred.global_hist_reg >> i) & nn_pred.gl_hist_mask))
+          W[i] += 1;
+        else
+          W[i] -= 1;
+      }
+    }
+
+    nn_pred.global_hist_reg = nn_pred.global_hist_reg << 1 | outcome;
   }
 }

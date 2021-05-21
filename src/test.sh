@@ -3,15 +3,18 @@ make
 
 
 SCHEME="gshare"
-PARMS=$1
+PARMS=":$1"
 
 SCHEME="tournament"
-PARMS="$1:$2:$3"
+PARMS=":$1:$2:$3"
+
+SCHEME="custom"
+PARMS=""
 
 # Testing all traces
 echo "\n\nBranch prediction scheme: $SCHEME with parms: $PARMS"
 for i in "fp_1.bz2" "fp_2.bz2" "int_1.bz2" "int_2.bz2" "mm_1.bz2" "mm_2.bz2"; 
     do echo "\n$i"; 
-    eval "bunzip2 -kc ../traces/$i | ./predictor --$SCHEME:$PARMS"
+    eval "bunzip2 -kc ../traces/$i | ./predictor --$SCHEME$PARMS"
 done
 
