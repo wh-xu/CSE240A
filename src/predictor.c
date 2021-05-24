@@ -64,19 +64,59 @@ struct tournament_predictor
   uint8_t last_global_pred;
 } tour_pred;
 
+#define USE_COMBINED_NN
+
+#ifndef USE_COMBINED_NN
 struct nn_predictor
 {
   uint32_t pc_mask;
-  uint32_t gl_hist_mask;
   int8_t *weights;
   uint8_t history_len;
-  uint32_t global_hist_reg;
+
+  uint64_t gl_hist_mask;
+  uint64_t global_hist_reg;
+
   uint8_t threshold;
   uint8_t last_pred;
 } nn_pred;
 
-const uint32_t nn_hist_len = 60;
-const uint32_t pc_ind_len = 10;
+const uint32_t nn_hist_len = 31;
+const uint32_t pc_ind_len = 11;
+
+#else
+
+struct combined_nn_predictor
+{
+  uint32_t *BHT;
+  uint32_t BHT_mask;
+
+  uint64_t gl_hist_mask;
+  uint64_t global_hist_reg;
+
+  uint32_t hist_weight_pc_mask;
+  uint32_t addr_weight_pc_mask;
+
+  int8_t *weight_add;
+  int8_t *weight_hist;
+
+  uint8_t history_len;
+  int8_t threshold;
+  int32_t last_pred;
+} com_nn_pred;
+
+const uint32_t BHT_addr_len = 11;
+const uint32_t _nn_global_hist_len = 30;
+const uint32_t _nn_local_hist_len = 11;
+#define hist_weight_len _nn_global_hist_len + _nn_local_hist_len
+
+const uint32_t addr_weight_len = 12;
+
+const uint32_t hist_weight_pc_len = 8;
+const uint32_t addr_weight_pc_len = 8;
+
+const uint32_t THETA = 64;
+
+#endif
 
 //------------------------------------//
 //        Predictor Functions         //
@@ -134,14 +174,14 @@ void init_predictor()
   }
   else if (bpType == CUSTOM)
   {
-    // 3. Initialize CUSTOM predictor
-    uint32_t mask = 0;
+// 3. Initialize CUSTOM predictor
+#ifndef USE_COMBINED_NN
+    uint64_t mask = 0;
     for (int i = 0; i < pc_ind_len; i++)
       mask = mask | 1 << i;
     nn_pred.pc_mask = mask;
 
     mask = 0;
-    // for (int i = 0; i < nn_hist_len; i++)
     mask = mask | 1;
     nn_pred.gl_hist_mask = mask;
 
@@ -150,6 +190,38 @@ void init_predictor()
 
     nn_pred.global_hist_reg = 0;
     nn_pred.threshold = 1.93 * nn_hist_len + 14;
+
+#else
+
+    com_nn_pred.BHT_mask = 0;
+    for (int i = 0; i < BHT_addr_len; i++)
+      com_nn_pred.BHT_mask = com_nn_pred.BHT_mask | 1 << i;
+
+    com_nn_pred.BHT = malloc((1 << BHT_addr_len) * sizeof(uint32_t));
+    memset(com_nn_pred.BHT, 0, (1 << BHT_addr_len) * sizeof(uint32_t));
+
+    com_nn_pred.gl_hist_mask = 0;
+    com_nn_pred.gl_hist_mask = com_nn_pred.gl_hist_mask | 1;
+
+    com_nn_pred.hist_weight_pc_mask = 0;
+    for (int i = 0; i < hist_weight_pc_len; i++)
+      com_nn_pred.hist_weight_pc_mask = com_nn_pred.hist_weight_pc_mask | 1 << i;
+
+    com_nn_pred.addr_weight_pc_mask = 0;
+    for (int i = 0; i < addr_weight_pc_len; i++)
+      com_nn_pred.addr_weight_pc_mask = com_nn_pred.addr_weight_pc_mask | 1 << i;
+
+    com_nn_pred.weight_hist = malloc(((1 << hist_weight_pc_len) * hist_weight_len) * sizeof(int8_t));
+    memset(com_nn_pred.weight_hist, 0, ((1 << hist_weight_pc_len) * hist_weight_len) * sizeof(int8_t));
+
+    com_nn_pred.weight_add = malloc(((1 << addr_weight_pc_len) * addr_weight_len) * sizeof(int8_t));
+    memset(com_nn_pred.weight_add, 0, ((1 << addr_weight_pc_len) * addr_weight_len) * sizeof(int8_t));
+
+    com_nn_pred.global_hist_reg = 0;
+    com_nn_pred.threshold = 0.0;
+    // com_nn_pred.threshold = 1.93 * hist_weight_len + 14;
+
+#endif
   }
 }
 
@@ -190,6 +262,8 @@ make_prediction(uint32_t pc)
   }
   else if (bpType == CUSTOM)
   {
+#ifndef USE_COMBINED_NN
+
     uint32_t weight_index = pc & nn_pred.pc_mask;
     int8_t *W = nn_pred.weights + weight_index * nn_hist_len;
 
@@ -206,6 +280,50 @@ make_prediction(uint32_t pc)
     uint8_t prediction = y > nn_pred.threshold ? TAKEN : NOTTAKEN;
     nn_pred.last_pred = prediction;
     return prediction;
+
+#else
+    // Compute y_addr
+    int32_t y_addr = 1;
+    uint32_t addr_weight_index = pc & com_nn_pred.addr_weight_pc_mask;
+    int8_t *W_addr = com_nn_pred.weight_add + addr_weight_index * addr_weight_len;
+    for (int i = 0; i < addr_weight_len; i++)
+    {
+      if (((addr_weight_index >> i) & ((uint32_t)(1))) == TAKEN)
+        y_addr += W_addr[i];
+      else
+        y_addr -= W_addr[i];
+    }
+
+    // Compute y_hist
+    uint32_t BHT_index = pc & com_nn_pred.BHT_mask;
+    uint32_t local_hist = com_nn_pred.BHT[BHT_index];
+
+    int32_t y_hist = 1;
+    uint32_t hist_weight_index = pc & com_nn_pred.hist_weight_pc_mask;
+    int8_t *W_hist = com_nn_pred.weight_hist + hist_weight_index * hist_weight_len;
+    for (int i = 0; i < hist_weight_len; i++)
+    {
+      if (i < _nn_global_hist_len)
+      {
+        if (((com_nn_pred.global_hist_reg >> i) & com_nn_pred.gl_hist_mask) == TAKEN)
+          y_hist += W_hist[i];
+        else
+          y_hist -= W_hist[i];
+      }
+      else
+      {
+        if (((local_hist >> (i - _nn_global_hist_len)) & ((uint32_t)(1))) == TAKEN)
+          y_hist += W_hist[i];
+        else
+          y_hist -= W_hist[i];
+      }
+    }
+
+    int32_t y_pred = y_hist + y_addr;
+    com_nn_pred.last_pred = y_pred;
+    return y_pred > com_nn_pred.threshold ? TAKEN : NOTTAKEN;
+
+#endif
   }
 
   // Make a prediction based on the bpType
@@ -301,6 +419,8 @@ void train_predictor(uint32_t pc, uint8_t outcome)
   }
   else if (bpType == CUSTOM)
   {
+#ifndef USE_COMBINED_NN
+
     if (nn_pred.last_pred != outcome)
     {
       uint32_t weight_index = pc & nn_pred.pc_mask;
@@ -316,5 +436,51 @@ void train_predictor(uint32_t pc, uint8_t outcome)
     }
 
     nn_pred.global_hist_reg = nn_pred.global_hist_reg << 1 | outcome;
+
+#else
+    uint8_t last_pred = com_nn_pred.last_pred > com_nn_pred.threshold ? TAKEN : NOTTAKEN;
+    uint32_t BHT_index = pc & com_nn_pred.BHT_mask;
+    uint32_t local_hist = com_nn_pred.BHT[BHT_index];
+
+    if (last_pred != outcome)
+    {
+      // Update the history-based perceptron
+      uint32_t hist_weight_index = pc & com_nn_pred.hist_weight_pc_mask;
+      int8_t *W_hist = com_nn_pred.weight_hist + hist_weight_index * hist_weight_len;
+      for (int i = 0; i < hist_weight_len; i++)
+      {
+        if (i < _nn_global_hist_len)
+        {
+          if (((com_nn_pred.global_hist_reg >> i) & com_nn_pred.gl_hist_mask) == outcome)
+            W_hist[i] += 1;
+          else
+            W_hist[i] -= 1;
+        }
+        else
+        {
+          if (((local_hist >> (i - _nn_global_hist_len)) & ((uint32_t)(1))) == outcome)
+            W_hist[i] += 1;
+          else
+            W_hist[i] -= 1;
+        }
+      }
+
+      // Update the address-based perceptron
+      int32_t y_addr = 1;
+      uint32_t addr_weight_index = pc & com_nn_pred.addr_weight_pc_mask;
+      int8_t *W_addr = com_nn_pred.weight_add + addr_weight_index * addr_weight_len;
+      for (int i = 0; i < addr_weight_len; i++)
+      {
+        if (((addr_weight_index >> i) & ((uint32_t)(1))) == outcome)
+          W_addr[i] += 1;
+        else
+          W_addr[i] -= 1;
+      }
+    }
+
+    com_nn_pred.BHT[BHT_index] = com_nn_pred.BHT[BHT_index] << 1 | outcome;
+    com_nn_pred.global_hist_reg = com_nn_pred.global_hist_reg << 1 | outcome;
+
+#endif
   }
 }
