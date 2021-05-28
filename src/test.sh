@@ -5,11 +5,11 @@ make
 SCHEME="gshare"
 PARMS=":$1"
 
-SCHEME="tournament"
-PARMS=":$1:$2:$3"
+#SCHEME="tournament"
+#PARMS=":$1:$2:$3"
 
-SCHEME="custom"
-PARMS=""
+#SCHEME="custom"
+#PARMS=""
 
 # Testing all traces
 echo "\n\nBranch prediction scheme: $SCHEME with parms: $PARMS"

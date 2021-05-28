@@ -1,0 +1,37 @@
+rm -f *.o predictor;
+gcc -g -std=c99 -Werror -c main.c
+gcc -g -std=c99 -Werror -c predictor.c
+gcc -g -std=c99 -Werror -lm -o predictor main.o predictor.o
+
+
+Branch prediction scheme: custom with parms: 
+
+fp_1.bz2
+Branches:           1546797
+Incorrect:            27522
+Misprediction Rate:   1.779
+
+fp_2.bz2
+Branches:           2422049
+Incorrect:            18391
+Misprediction Rate:   0.759
+
+int_1.bz2
+Branches:           3771697
+Incorrect:           616872
+Misprediction Rate:  16.355
+
+int_2.bz2
+Branches:           3755315
+Incorrect:            19827
+Misprediction Rate:   0.528
+
+mm_1.bz2
+Branches:           3014850
+Incorrect:           106194
+Misprediction Rate:   3.522
+
+mm_2.bz2
+Branches:           2563897
+Incorrect:           264623
+Misprediction Rate:  10.321

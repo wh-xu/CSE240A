@@ -1,0 +1,37 @@
+rm -f *.o predictor;
+gcc -g -std=c99 -Werror -c main.c
+gcc -g -std=c99 -Werror -c predictor.c
+gcc -g -std=c99 -Werror -lm -o predictor main.o predictor.o
+
+
+Branch prediction scheme: tournament with parms: :11:9:9::
+
+fp_1.bz2
+Branches:           1546797
+Incorrect:            30278
+Misprediction Rate:   1.957
+
+fp_2.bz2
+Branches:           2422049
+Incorrect:           122730
+Misprediction Rate:   5.067
+
+int_1.bz2
+Branches:           3771697
+Incorrect:           628846
+Misprediction Rate:  16.673
+
+int_2.bz2
+Branches:           3755315
+Incorrect:            33054
+Misprediction Rate:   0.880
+
+mm_1.bz2
+Branches:           3014850
+Incorrect:           248675
+Misprediction Rate:   8.248
+
+mm_2.bz2
+Branches:           2563897
+Incorrect:           333327
+Misprediction Rate:  13.001

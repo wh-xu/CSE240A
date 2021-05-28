@@ -4,7 +4,7 @@ gcc -g -std=c99 -Werror -c predictor.c
 gcc -g -std=c99 -Werror -lm -o predictor main.o predictor.o
 
 
-Branch prediction scheme: tournament with parms: 12:10:10
+Branch prediction scheme: tournament with parms: :12:10:10::
 
 fp_1.bz2
 Branches:           1546797

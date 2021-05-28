@@ -8,30 +8,30 @@ Branch prediction scheme: custom with parms:
 
 fp_1.bz2
 Branches:           1546797
-Incorrect:            27463
-Misprediction Rate:   1.775
+Incorrect:            27411
+Misprediction Rate:   1.772
 
 fp_2.bz2
 Branches:           2422049
-Incorrect:            46947
-Misprediction Rate:   1.938
+Incorrect:            18346
+Misprediction Rate:   0.757
 
 int_1.bz2
 Branches:           3771697
-Incorrect:           447401
-Misprediction Rate:  11.862
+Incorrect:           536221
+Misprediction Rate:  14.217
 
 int_2.bz2
 Branches:           3755315
-Incorrect:            22926
-Misprediction Rate:   0.610
+Incorrect:            18571
+Misprediction Rate:   0.495
 
 mm_1.bz2
 Branches:           3014850
-Incorrect:            92366
-Misprediction Rate:   3.064
+Incorrect:           123235
+Misprediction Rate:   4.088
 
 mm_2.bz2
 Branches:           2563897
-Incorrect:           204333
-Misprediction Rate:   7.970
+Incorrect:           239424
+Misprediction Rate:   9.338

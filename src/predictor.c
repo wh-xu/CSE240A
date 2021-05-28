@@ -39,7 +39,7 @@ int verbose;
 
 struct gshare_predictor
 {
-  uint32_t hist_address;
+  uint32_t global_hist_addr;
   uint8_t *hist_table;
   uint32_t address_mask;
   uint8_t last_pred_outcome;
@@ -104,15 +104,15 @@ struct combined_nn_predictor
   int32_t last_pred;
 } com_nn_pred;
 
-const uint32_t BHT_addr_len = 11;
-const uint32_t _nn_global_hist_len = 30;
-const uint32_t _nn_local_hist_len = 11;
+const uint32_t BHT_addr_len = 8;
+const uint32_t _nn_global_hist_len = 12;
+const uint32_t _nn_local_hist_len = 8;
 #define hist_weight_len _nn_global_hist_len + _nn_local_hist_len
 
-const uint32_t addr_weight_len = 12;
+const uint32_t addr_weight_len = 8;
 
 const uint32_t hist_weight_pc_len = 8;
-const uint32_t addr_weight_pc_len = 8;
+const uint32_t addr_weight_pc_len = 7;
 
 const uint32_t THETA = 64;
 
@@ -140,6 +140,7 @@ void init_predictor()
       mask = mask | 1 << i;
 
     gshare_pred.address_mask = mask;
+    gshare_pred.global_hist_addr = 0;
   }
   else if (bpType == TOURNAMENT)
   {
@@ -238,7 +239,7 @@ make_prediction(uint32_t pc)
   if (bpType == GSHARE)
   {
     uint32_t masked_pc = pc & gshare_pred.address_mask;
-    uint32_t masked_hist = gshare_pred.hist_address & gshare_pred.address_mask;
+    uint32_t masked_hist = gshare_pred.global_hist_addr & gshare_pred.address_mask;
     uint32_t table_index = masked_pc ^ masked_hist;
 
     uint8_t pred_outcome = gshare_pred.hist_table[table_index] >= 2 ? TAKEN : NOTTAKEN;
@@ -355,10 +356,8 @@ void train_predictor(uint32_t pc, uint8_t outcome)
   {
     // 1. Train GSHARE predictor
     uint32_t masked_pc = pc & gshare_pred.address_mask;
-    uint32_t masked_hist = gshare_pred.hist_address & gshare_pred.address_mask;
+    uint32_t masked_hist = gshare_pred.global_hist_addr & gshare_pred.address_mask;
     uint32_t table_index = masked_pc ^ masked_hist;
-
-    gshare_pred.hist_address = masked_hist;
 
     if (outcome == TAKEN)
     {
@@ -370,6 +369,8 @@ void train_predictor(uint32_t pc, uint8_t outcome)
       if (gshare_pred.hist_table[table_index] > SN)
         gshare_pred.hist_table[table_index]--;
     }
+
+    gshare_pred.global_hist_addr = (gshare_pred.global_hist_addr << 1 + outcome) & gshare_pred.address_mask;
   }
   else if (bpType == TOURNAMENT)
   {

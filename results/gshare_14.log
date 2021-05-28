@@ -4,34 +4,34 @@ gcc -g -std=c99 -Werror -c predictor.c
 gcc -g -std=c99 -Werror -lm -o predictor main.o predictor.o
 
 
-Branch prediction scheme: gshare with parms: 5
+Branch prediction scheme: gshare with parms: :14
 
 fp_1.bz2
 Branches:           1546797
-Incorrect:            50272
-Misprediction Rate:   3.250
+Incorrect:            20396
+Misprediction Rate:   1.319
 
 fp_2.bz2
 Branches:           2422049
-Incorrect:          1007465
-Misprediction Rate:  41.596
+Incorrect:           482841
+Misprediction Rate:  19.935
 
 int_1.bz2
 Branches:           3771697
-Incorrect:          1110963
-Misprediction Rate:  29.455
+Incorrect:           584205
+Misprediction Rate:  15.489
 
 int_2.bz2
 Branches:           3755315
-Incorrect:            45539
-Misprediction Rate:   1.213
+Incorrect:            25758
+Misprediction Rate:   0.686
 
 mm_1.bz2
 Branches:           3014850
-Incorrect:           943762
-Misprediction Rate:  31.304
+Incorrect:           299274
+Misprediction Rate:   9.927
 
 mm_2.bz2
 Branches:           2563897
-Incorrect:           627751
-Misprediction Rate:  24.484
+Incorrect:           250272
+Misprediction Rate:   9.761
